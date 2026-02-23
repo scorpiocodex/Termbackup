@@ -1,0 +1,26 @@
++--------------------- SYSTEM ACTIVATED ----------------------+
+|   ______               ____             __                  |
+|  /_  __/___  _________/ __ )____ ______/ /____  ______      |
+|   / / / __ \/ ___/ __  __ \/ __ `/ ___/ //_/ / / / __ \     |
+|  / / / /_/ / /  / / / / / / /_/ / /__/ ,< / /_/ / /_/ /     |
+| /_/  \____/_/  /_/ /_/ /_/\__,_/\___/_/|_|\__,_/ ,___/      |
+|                                               /_/           |
+|                                                             |
+|                                                             |
+|   [ v1.0 � NEXUS ZERO-TRUST ENGINE ]                        |
+|                                                             |
++-------------- Encrypt Reality. Trust Nothing. --------------+
+[PK] Starting snapshot for realprof on 
+C:\Users\scorp\dev\python\Project\termbackup\test_backup_dir
+[Creating zero-trust snapshot...]
+
+[SEC] Snapshot 20260223_225311 created and encrypted locally.
+[Uploading to GitHub...]
+
+
++-------------------------------- [ERR] ERROR --------------------------------+
+| Failed to upload snapshots/snapshot_20260223_225311.tbk: 404                |
+| {"message":"Not                                                             |
+| Found","documentation_url":"https://docs.github.com/rest/repos/contents#cre |
+| ate-or-update-file-contents","status":"404"}                                |
++-----------------------------------------------------------------------------+

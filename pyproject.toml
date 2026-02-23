@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "termbackup"
+version = "1.0.0"
+description = "A next-generation zero-trust encrypted GitHub backup engine forged for terminal supremacy."
+readme = "README.md"
+authors = [{ name = "ScorpioCodeX", email = "scorpiocodex0@gmail.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "cryptography>=41.0.0",
+    "argon2-cffi>=23.0.0",
+    "httpx[http2]>=0.25.0",
+    "keyring>=24.0.0",
+    "pydantic>=2.5.0",
+    "apscheduler>=3.10.0",
+    "mnemonic>=0.20",
+]
+
+[project.scripts]
+termbackup = "termbackup.cli:app"
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.6.0",
+    "ruff>=0.1.0",
+    "bandit>=1.7.5",
+    "pytest>=7.4.0",
+    "hypothesis>=6.88.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["termbackup"]
+
+[tool.mypy]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I"]
