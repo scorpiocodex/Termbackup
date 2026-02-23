@@ -19,7 +19,7 @@ A next-generation zero-trust encrypted backup engine forged for terminal suprema
 
 ## ⚡ WHAT IS TERMBACKUP?
 
-**Termbackup v1.0** is an extremely powerful, fully-client-side-encrypted repository synchronizer. If you work with sensitive data, configuration files, or local secrets, you need absolute cryptographic certainty that your remote backups are private.
+**Termbackup** is an extremely powerful, fully-client-side-encrypted repository synchronizer. If you work with sensitive data, configuration files, or local secrets, you need absolute cryptographic certainty that your remote backups are private.
 
 Termbackup is a professionally hardened, cryptographic vault designed to live inside your terminal. It compresses, encrypts, and uploads backups of your critical directories natively over the GitHub API, silently bypassing the need for Git histories. No plaintext files are ever written to remote storage. **Absolute zero-trust.**
 
