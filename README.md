@@ -119,7 +119,9 @@ python -m termbackup.cli plugin
 ---
 
 <div align="center">
-```text                                                                               
+
+```text
+                                                                               
   _|_|_|_|_|                                  _|                            _|                          
       _|      _|_|    _|  _|_|  _|_|_|  _|_|  _|_|_|      _|_|_|    _|_|_|  _|  _|    _|    _|  _|_|_|  
       _|    _|_|_|_|  _|_|      _|    _|    _|  _|    _|  _|    _|  _|        _|_|      _|    _|  _|    _|
@@ -128,6 +130,7 @@ python -m termbackup.cli plugin
                                                                                                     _|      
                                                                                                     _|      
 ```
+
   <p><b>Created with passion by ScorpioCodeX.</b></p>
   <p><i>The future of reactive cryptography has arrived.</i></p>
 </div>
