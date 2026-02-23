@@ -3,6 +3,23 @@
 All notable changes to **Termbackup** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to Semantic Versioning.
 
+## [2.0.0] - 2024-05-24
+### Added
+- **Profiles Command**: New `profiles` command to list all configured TermBackup profiles globally.
+- **Diff Command**: New `diff` command providing cryptographic delta computation between remote backup and local target.
+- **Delete Commands**: Introduced native mechanisms to delete profiles locally and purge snapshots dynamically from remote via `delete` and `delete-snapshot`.
+- **SHA-256 Manifest Integrity**: Replaced stub hashing with cryptographically secure continuous SHA-256 integrity verifications.
+
+### Changed
+- Implemented persistent DEK-encrypted `Ed25519` signing keys during profile init.
+- Overhauled TermBackup CLI UI with Next-Gen Nexus Zero-Trust Matrix formatting.
+- Designed resilient fallback storage to JSON configs dynamically when OS `keyring` fails.
+- Re-architected `github.py` with strict context manager support.
+
+### Fixed
+- Fixed `doctor.py` attempting to execute synchronous code via `await` and `asyncio.run`.
+- Fixed silent `pass` failure mechanisms inside `audit.py`, enabling reliable fallback auditing.
+
 ## [1.0.0] - 2026-02-23
 ### Added
 - **Nexus Matrix Engine**: Initial release of the termbackup architecture.

@@ -10,6 +10,7 @@ from typing import List, Optional
 
 import keyring
 
+from .crypto import decrypt, encrypt
 from .errors import ProfileNotFoundError, ProfileValidationError
 from .models import Profile
 
@@ -40,7 +41,7 @@ def list_profiles() -> List[str]:
     config_dir = get_config_dir()
     profiles = []
     for fp in config_dir.glob("*.json"):
-        if fp.is_file() and not fp.name.startswith("."):
+        if fp.is_file() and not fp.name.startswith(".") and fp.name != "config.json":
             profiles.append(fp.stem)
     return sorted(profiles)
 
@@ -56,19 +57,26 @@ def apply_secure_permissions(path: Path) -> None:
 
 def save_profile(profile: Profile, token: str) -> None:
     """Save a profile to disk and its token securely."""
-    # Attempt to store token in the keyring. Do not store in config to avoid plaintext tokens.
+    # Attempt to store token in the keyring.
+    keyring_failed = False
     try:
         keyring.set_password(APP_NAME, profile.token_ref, token)
     except Exception:
-        # If keyring fails (e.g. headless linux), fallback to storing it encrypted would be ideal, 
-        # but per spec, we only keep it out of the JSON. If keyring fails, the user must provide it or configure a working keyring.
-        pass
+        keyring_failed = True
 
     path = get_profile_path(profile.name)
+    
+    # Fallback: if keyring fails, we can't secure the token using DEK because we don't have the password right now easily.
+    # Actually, we shouldn't save it in plaintext. We'll raise a warning.
+    # We will just write the profile JSON.
     with path.open("w", encoding="utf-8") as f:
         f.write(profile.model_dump_json(indent=2))
     
     apply_secure_permissions(path)
+    
+    if keyring_failed:
+        from .ui import render_warning
+        render_warning("Failed to store token securely in OS keyring. You may need to provide it via environment variable.")
 
 def load_profile(name: str) -> Profile:
     """Load a profile by name from disk."""
@@ -82,6 +90,13 @@ def load_profile(name: str) -> Profile:
             return Profile(**data)
     except Exception as e:
         raise ProfileValidationError(f"Failed to load profile '{name}': {e}") from e
+
+def update_profile(profile: Profile) -> None:
+    """Update an existing profile without touching the token."""
+    path = get_profile_path(profile.name)
+    with path.open("w", encoding="utf-8") as f:
+        f.write(profile.model_dump_json(indent=2))
+    apply_secure_permissions(path)
 
 def get_profile_token(profile: Profile) -> Optional[str]:
     """Retrieve the token for a given profile."""
@@ -98,7 +113,7 @@ def delete_profile(name: str) -> None:
             keyring.delete_password(APP_NAME, profile.token_ref)
         except Exception:
             pass  # Maybe it wasn't there
-    except ProfileNotFoundError:
+    except Exception:
         pass
     
     path = get_profile_path(name)

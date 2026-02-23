@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "termbackup"
-version = "1.0.0"
+version = "2.0.0"
 description = "A next-generation zero-trust encrypted GitHub backup engine forged for terminal supremacy."
 readme = "README.md"
 authors = [{ name = "ScorpioCodeX", email = "scorpiocodex0@gmail.com" }]

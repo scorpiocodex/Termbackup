@@ -36,6 +36,12 @@ class GitHubClient:
             timeout=30.0
         )
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def close(self) -> None:
         self._client.close()
 
@@ -51,7 +57,8 @@ class GitHubClient:
             if "X-RateLimit-Remaining" in response.headers:
                 remaining = int(response.headers["X-RateLimit-Remaining"])
                 if remaining < 10 and attempt == 0:
-                    pass # We could logger.warning here
+                    from .audit import AuditLogger
+                    AuditLogger().log("github_rate_limit_warning", remaining=remaining)
             
             if response.status_code == 401:
                 raise AuthenticationError("GitHub token is invalid or expired.")
@@ -127,15 +134,35 @@ class GitHubClient:
         if resp.status_code not in (200, 201):
             raise UploadError(f"Failed to upload {path}: {resp.status_code} {resp.text}")
 
-    def download_file(self, repo: str, path: str) -> bytes:
-        """Download a file's raw content."""
+    def download_file(self, repo: str, path: str, expected_sha256: Optional[str] = None) -> bytes:
+        """Download a file's raw content, with optional SHA-256 validation."""
         file_url = f"/repos/{repo}/contents/{path}"
         resp = self._request("GET", file_url, headers={"Accept": "application/vnd.github.v3.raw"})
         if resp.status_code == 404:
             raise FileNotFoundError(f"File {path} not found in {repo}")
         if resp.status_code != 200:
             raise UploadError(f"Failed to download {path}: {resp.status_code}")
-        return resp.content
+            
+        content = resp.content
+        if expected_sha256:
+            from .crypto import compute_sha256
+            if compute_sha256(content) != expected_sha256:
+                raise UploadError(f"SHA-256 mismatch for {path}. Payload is corrupted or tampered.")
+                
+        return content
+
+    def delete_file(self, repo: str, path: str, message: str) -> None:
+        """Delete a file from the repository."""
+        file_url = f"/repos/{repo}/contents/{path}"
+        resp = self._request("GET", file_url)
+        if resp.status_code == 404:
+            return
+        resp.raise_for_status()
+        sha = resp.json().get("sha")
+        
+        payload = {"message": message, "sha": sha}
+        res = self._request("DELETE", file_url, json=payload)
+        res.raise_for_status()
 
     def list_snapshots(self, repo: str) -> List[str]:
         """List snapshot IDs directly from the repository structure."""

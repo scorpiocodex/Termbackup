@@ -29,8 +29,15 @@ class AuditLogger:
         try:
             with self.log_file.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
-        except Exception:
-            pass # Failsafe, don't crash app if audit log is locked/unwriteable
+        except Exception as e:
+            try:
+                import sys
+                sys.stderr.write(f"[TermBackup Audit Error] Failed to write log: {e}\n")
+                fallback = get_config_dir() / "audit_fallback.log"
+                with fallback.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(entry) + "\n")
+            except Exception:
+                pass
 
 def get_audit_log(last_n: int = 50) -> list[Dict[str, Any]]:
     """Retrieve the last N events from the audit log."""

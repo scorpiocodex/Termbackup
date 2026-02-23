@@ -22,6 +22,8 @@ class Profile(FrozenModel):
     master_key_salt: str     # Base64 encoded Argon2 salt for the password
     recovery_key_enc: str    # Base64 encoded, DEK encrypted with Recovery Phrase
     recovery_key_salt: str   # Base64 encoded salt for the recovery phrase KDF
+    signing_public_key: Optional[str] = None # Base64 encoded Ed25519 public key
+    signing_private_key_enc: Optional[str] = None # Base64 encoded, DEK encrypted private key
 
     @field_validator("repo")
     @classmethod
@@ -53,7 +55,7 @@ class ManifestEntry(FrozenModel):
     uploaded_at: datetime
 
 class Manifest(FrozenModel):
-    version: str = "1.0"
+    version: str = "2.0"
     entries: List[ManifestEntry] = Field(default_factory=list)
 
 class DeltaResult(FrozenModel):

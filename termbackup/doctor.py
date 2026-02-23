@@ -8,13 +8,21 @@ from typing import List
 
 import httpx
 
-from .config import get_config_dir, list_profiles, load_profile
+import importlib.metadata
+import shutil
+import ssl
+import time
+from typing import List
+
+import httpx
+
+from .config import get_config_dir, list_profiles, load_profile, get_profile_token
 from .github import GitHubClient
 from .models import DoctorCheck
 
 
-async def run_diagnostics() -> List[DoctorCheck]:
-    """Execute the 12-point health checks."""
+def run_diagnostics() -> List[DoctorCheck]:
+    """Execute the 12-point health checks synchronously."""
     checks: List[DoctorCheck] = []
     
     # 1. GitHub token scopes & 2. Rate limits 
@@ -33,12 +41,12 @@ async def run_diagnostics() -> List[DoctorCheck]:
             
     if client:
         try:
-            val = await client.validate_token()
+            val = client.validate_token()
             status = "pass" if val.is_valid and not val.needs_warning else "warn"
             checks.append(DoctorCheck(name="1. GitHub Token Validation", status=status, detail=val.message or "Token valid and scoped correctly."))
             
             # Rate limit check roughly
-            resp = await client._client.get("/rate_limit")
+            resp = client._client.get("/rate_limit")
             if resp.status_code == 200:
                 limit = resp.json().get("rate", {}).get("remaining", "Unknown")
                 status = "pass" if int(limit) > 100 else "warn"
@@ -48,7 +56,7 @@ async def run_diagnostics() -> List[DoctorCheck]:
         except Exception as e:
             checks.append(DoctorCheck(name="1/2. GitHub Checks", status="fail", detail=str(e)))
         finally:
-            await client.close()
+            client.close()
     else:
         checks.append(DoctorCheck(name="1. GitHub Token Validation", status="warn", detail="No profiles found with tokens to test."))
         checks.append(DoctorCheck(name="2. GitHub API Rate Limit", status="warn", detail="Skipped."))
@@ -103,9 +111,53 @@ async def run_diagnostics() -> List[DoctorCheck]:
     except Exception as e:
         checks.append(DoctorCheck(name="9. Disk Space (Config)", status="fail", detail=str(e)))
         
-    # 10, 11, 12 stubbed for standard doctor output mapping
-    checks.append(DoctorCheck(name="10. Manifest Integrity", status="pass", detail="Checks out (stub)"))
-    checks.append(DoctorCheck(name="11. Snapshot Consistency", status="pass", detail="Hashes match (stub)"))
-    checks.append(DoctorCheck(name="12. Dependencies", status="pass", detail="All constraints met"))
+    # 10. Manifest Integrity
+    integrity_status = "pass"
+    integrity_detail = "Verified"
+    if client and profiles:
+        prof = load_profile(profiles[0])
+        token = get_profile_token(prof)
+        if token:
+            temp_client = GitHubClient(token)
+            try:
+                manifest = temp_client.download_manifest(prof.repo)
+                if manifest:
+                    from .manifest import verify_integrity
+                    errors = verify_integrity(manifest)
+                    if errors:
+                        integrity_status = "fail"
+                        integrity_detail = f"{len(errors)} issues"
+                else:
+                    integrity_status = "info"
+                    integrity_detail = "No manifest yet"
+            except Exception as e:
+                integrity_status = "fail"
+                integrity_detail = str(e)
+            finally:
+                temp_client.close()
+    else:
+        integrity_status = "warn"
+        integrity_detail = "Skipped"
+    checks.append(DoctorCheck(name="10. Manifest Integrity", status=integrity_status, detail=integrity_detail))
+
+    # 11. Delta Engine
+    try:
+        from .delta import scan_directory
+        checks.append(DoctorCheck(name="11. Delta Hashing Engine", status="pass", detail="Active"))
+    except Exception as e:
+        checks.append(DoctorCheck(name="11. Delta Hashing Engine", status="fail", detail=str(e)))
+
+    # 12. Dependencies
+    try:
+        import cryptography
+        import httpx
+        import typer
+        import rich
+        import pydantic
+        import argon2
+        import mnemonic
+        checks.append(DoctorCheck(name="12. Dependencies", status="pass", detail="All core requirements met"))
+    except ImportError as e:
+        checks.append(DoctorCheck(name="12. Dependencies", status="fail", detail=str(e)))
     
     return checks

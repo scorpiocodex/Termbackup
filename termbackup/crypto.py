@@ -2,6 +2,7 @@
 Top-level crypto module owning all security-critical operations.
 Argon2id KDF, AES-256-GCM encryption/decryption, Ed25519 signatures, Recovery Phrase generation.
 """
+import hashlib
 import hmac
 import os
 from typing import Tuple
@@ -17,6 +18,12 @@ from .errors import DecryptionError, EncryptionError, KeyDerivationError, Signat
 SALT_LEN = 32
 NONCE_LEN = 12
 KEY_LEN = 32
+
+def compute_sha256(data: bytes) -> str:
+    """Compute the SHA-256 hash of raw bytes."""
+    hasher = hashlib.sha256()
+    hasher.update(data)
+    return hasher.hexdigest()
 
 def generate_salt() -> bytes:
     """Generate 32 bytes of secure random salt."""

@@ -45,9 +45,50 @@ class DaemonProcess:
         from .audit import AuditLogger
         logger = AuditLogger()
         logger.log("daemon_job_start", profile=self.profile)
-        # We would execute the snapshot logic here.
-        # Since this runs headless, it requires the password to be in the keyring.
-        logger.log("daemon_job_end", profile=self.profile, status="success")
+        try:
+            password = os.environ.get("TERMBACKUP_PASSWORD")
+            if not password:
+                raise ValueError("TERMBACKUP_PASSWORD environment variable not set. Ghost Protocol cannot decrypt DEK.")
+                
+            from .config import load_profile, get_profile_token
+            from .snapshot import create_snapshot
+            from .github import GitHubClient
+            from datetime import datetime, timezone
+            
+            profile = load_profile(self.profile)
+            token = get_profile_token(profile)
+            if not token:
+                raise ValueError("Token not found in keyring.")
+                
+            with GitHubClient(token) as client:
+                tbk_path, meta = create_snapshot(profile, password)
+                content = tbk_path.read_bytes()
+                
+                manifest = client.download_manifest(profile.repo)
+                if not manifest:
+                    from .manifest import create_initial_manifest
+                    manifest = create_initial_manifest()
+                    
+                client.upload_file(profile.repo, f"snapshots/{tbk_path.name}", content, f"Ghost Protocol Auto-backup {meta.snapshot_id}")
+                
+                from .manifest import append_entry
+                from .models import ManifestEntry
+                from .crypto import compute_sha256
+                
+                entry = ManifestEntry(
+                    snapshot_id=meta.snapshot_id,
+                    filename=tbk_path.name,
+                    sha256=compute_sha256(content),
+                    size=meta.total_size,
+                    uploaded_at=datetime.now(timezone.utc)
+                )
+                manifest = append_entry(manifest, entry)
+                client.upload_manifest(profile.repo, manifest)
+                
+            tbk_path.unlink(missing_ok=True)
+            logger.log("daemon_job_end", profile=self.profile, status="success", snapshot_id=meta.snapshot_id)
+        except Exception as e:
+            logger.log("daemon_job_end", profile=self.profile, status="failed", error=str(e))
 
     def start(self) -> None:
         if self.is_running():

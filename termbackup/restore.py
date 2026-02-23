@@ -17,9 +17,7 @@ from .crypto import derive_key, decrypt, verify
 from .utils import validate_path
 from .snapshot import MAGIC_BYTES, get_master_dek
 
-def list_snapshots(profile: Profile, password: str) -> List[SnapshotMeta]:
-    """Stub to list snapshots for the profile."""
-    return []
+
 
 def _read_snapshot_payload(tbk_path: Path, dek: bytes, public_key_raw: Optional[bytes] = None) -> bytes:
     """Reads the .tbk file, verifies signature, and decrypts it with the DEK."""
@@ -70,11 +68,48 @@ def preview_tree(tbk_path: Path, profile: Profile, password: str, public_key_raw
         
     return tree
 
-def diff_snapshot(tbk_path: Path, profile: Profile, password: str, target_dir: Path) -> DeltaResult:
+def diff_snapshot(tbk_path: Path, profile: Profile, password: str, target_dir: Path, public_key_raw: Optional[bytes] = None) -> DeltaResult:
     """Compare what is in the snapshot vs what's currently in target_dir."""
-    # Simplified mock for the diff feature. In a full implementation,
-    # we'd hash the files in target_dir and compare them against tar.getmembers()
-    return DeltaResult()
+    from .delta import scan_directory, FileFingerprint, compute_delta
+    import hashlib
+    
+    target_dir = Path(target_dir).resolve()
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True, exist_ok=True)
+        
+    current_files = scan_directory(target_dir, profile.exclude_patterns)
+    
+    dek = get_master_dek(profile, password)
+    plaintext = _read_snapshot_payload(tbk_path, dek, public_key_raw)
+    
+    buffer = io.BytesIO(plaintext)
+    snapshot_files: List[FileFingerprint] = []
+    
+    try:
+        with gzip.GzipFile(fileobj=buffer, mode="rb") as gz:
+            with tarfile.open(fileobj=gz, mode="r") as tar:
+                for member in tar.getmembers():
+                    if member.name == ".tbk_meta.json" or not member.isfile():
+                        continue
+                        
+                    f_in = tar.extractfile(member)
+                    if not f_in:
+                        continue
+                        
+                    hasher = hashlib.sha256()
+                    for chunk in iter(lambda: f_in.read(65536), b""):
+                        hasher.update(chunk)
+                        
+                    snapshot_files.append(FileFingerprint(
+                        relative_path=member.name,
+                        sha256=hasher.hexdigest(),
+                        size=member.size,
+                        mtime=member.mtime
+                    ))
+    except Exception as e:
+        raise RestoreExtractionError(f"Failed to read archive for diff: {e}") from e
+        
+    return compute_delta(current=current_files, parent=snapshot_files)
 
 def restore_snapshot(
     tbk_path: Path, 

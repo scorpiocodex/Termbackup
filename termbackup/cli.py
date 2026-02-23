@@ -35,7 +35,7 @@ from .ui import (
 
 app = typer.Typer(
     help=(
-        "[bold cyan]TERMBACKUP[/] [dim]v1.0[/]\n\n"
+        "[bold cyan]TERMBACKUP[/] [dim]v2.0[/]\n\n"
         "⚡ [bold magenta]The Nexus Zero-Trust Matrix Engine[/]\n"
         "A next-generation, professionally hardened, cryptographic vault for your terminal.\n\n"
         "> [italic]Encrypt Reality. Trust Nothing.[/]\n"
@@ -95,10 +95,12 @@ def init(
     rec_kek = derive_recovery_key(phrase, rec_salt)
     recovery_key_enc = encrypt(master_dek, rec_kek)
     
-    # Generate Ed25519 signing keypair (Stored along with profile, for now we will just re-derive or store the priv key alongside)
-    # Actually, a secure design usually stores the Ed25519 private key encrypted by the DEK.
-    # To keep model simple based on our definition, we won't persist signing keys right now here,
-    # we would add them to the json encrypted. Let's just create the profile object.
+    # Generate Ed25519 signing keypair
+    priv, pub = generate_signing_keypair()
+    pub_b64 = base64.b64encode(pub).decode("ascii")
+    # Store private key encrypted by DEK
+    priv_enc = encrypt(priv, master_dek)
+    priv_enc_b64 = base64.b64encode(priv_enc).decode("ascii")
     
     profile = Profile(
         name=name,
@@ -109,7 +111,9 @@ def init(
         master_key_enc=base64.b64encode(master_key_enc).decode("ascii"),
         master_key_salt=base64.b64encode(pwd_salt).decode("ascii"),
         recovery_key_enc=base64.b64encode(recovery_key_enc).decode("ascii"),
-        recovery_key_salt=base64.b64encode(rec_salt).decode("ascii")
+        recovery_key_salt=base64.b64encode(rec_salt).decode("ascii"),
+        signing_public_key=pub_b64,
+        signing_private_key_enc=priv_enc_b64
     )
     
     save_profile(profile, token)
@@ -125,7 +129,7 @@ def init(
 from .github import GitHubClient
 from .manifest import create_initial_manifest
 from .snapshot import create_snapshot
-from .restore import list_snapshots as _list_snapshots, preview_tree, restore_snapshot, diff_snapshot
+from .restore import preview_tree, restore_snapshot, diff_snapshot
 
 @app.command(name="snapshot")
 def create_snapshot_cmd(
@@ -146,13 +150,8 @@ def create_snapshot_cmd(
             
         client = GitHubClient(token)
         
-        # We need the signing key. For this iteration, since we didn't persist the signing key in profile for simplicity, 
-        # we will generate a fresh ephemeral one per snapshot (which is fine for individual snapshot integrity verification, 
-        # though not state-of-the-art for identity pinning without a PKI).
-        priv, pub = generate_signing_keypair()
-        
-        with render_progress("Creating zero-trust snapshot..."):
-            tbk_path, meta = create_snapshot(profile, password, priv)
+        with render_progress("Creating zero-trust snapshot...") as progress:
+            tbk_path, meta = create_snapshot(profile, password)
             
         render_status("encrypt", f"Snapshot {meta.snapshot_id} created and encrypted locally.")
         
@@ -171,10 +170,11 @@ def create_snapshot_cmd(
             # Update manifest
             from .manifest import append_entry
             from .models import ManifestEntry
+            from .crypto import compute_sha256
             entry = ManifestEntry(
                 snapshot_id=meta.snapshot_id,
                 filename=tbk_path.name,
-                sha256="stub_hash",  # We can compute real hash if needed
+                sha256=compute_sha256(content),
                 size=meta.total_size,
                 uploaded_at=datetime.now(timezone.utc)
             )
@@ -238,7 +238,7 @@ def run_doctor():
     render_banner()
     from .doctor import run_diagnostics
     with render_progress("Running diagnostic checks..."):
-        results = asyncio.run(run_diagnostics())
+        results = run_diagnostics()
         
     rows = []
     for r in results:
@@ -324,14 +324,133 @@ def plugin_list():
     from .plugins import load_plugins
     plugins = load_plugins()
     if not plugins:
-        render_status("info", "No plugins loaded.")
+        render_status("plugin", "No active plugins found.")
+    else:
+        for p in plugins:
+            typer.echo(f"- {p.name} (v{p.version}): {p.description}")
+
+@app.command(name="profiles")
+def list_profiles_cmd(
+    json_output: bool = typer.Option(False, "--json", help="Output in JSON format.")
+):
+    """List all configured Termbackup profiles."""
+    from .config import list_profiles, load_profile
+    from .ui import console
+    import json
+    
+    profiles = list_profiles()
+    if json_output:
+        profiles_data = []
+        for p in profiles:
+            try:
+                prof = load_profile(p)
+                profiles_data.append({"name": prof.name, "repo": prof.repo, "source_dir": prof.source_dir})
+            except Exception:
+                pass
+        print(json.dumps(profiles_data, indent=2))
+        return
+
+    if not profiles:
+        typer.echo("No profiles found.")
         return
         
+    from .ui import render_table
+    
     rows = []
-    for p in plugins:
-        rows.append([p.name, p.version, "Verified"])
+    for p in profiles:
+        try:
+            prof = load_profile(p)
+            rows.append([prof.name, prof.repo, prof.source_dir])
+        except Exception as e:
+            err_msg = str(e).split('\n')[0]
+            if len(err_msg) > 60: err_msg = err_msg[:57] + "..."
+            rows.append([p, "[red]ERROR[/]", err_msg])
+            
+    render_table("Configured Profiles", ["Name", "Repository", "Source Directory"], rows)
+
+
+@app.command(name="delete")
+def delete_profile_cmd(
+    name: str = typer.Argument(..., help="Profile to delete")
+):
+    """Delete a profile and its securely stored token."""
+    from .config import delete_profile
+    from .ui import render_status
+    delete_profile(name)
+    render_status("delete", f"Profile '{name}' deleted.")
+
+
+@app.command(name="version")
+def version_cmd():
+    """Display Termbackup version information."""
+    from .ui import console
+    from rich.panel import Panel
+    v = "2.0.0"
+    console.print(Panel(f"[bold cyan]TERMBACKUP[/] v{v}\n[dim]The Nexus Zero-Trust Matrix Engine[/]", border_style="cyan", expand=False))
+
+
+@app.command(name="diff")
+def diff_cmd(
+    profile_name: str = typer.Argument(..., help="Profile name"),
+    password: str = typer.Option(..., prompt=True, hide_input=True, help="Master password"),
+    snapshot_id: str = typer.Option(..., "--snapshot", "-s", help="Snapshot ID to compare against")
+):
+    """Compare a snapshot with the current filesystem."""
+    from .config import load_profile, get_profile_token
+    from .github import GitHubClient
+    from .restore import diff_snapshot
+    from .ui import render_progress, render_error, render_diff
+    import tempfile
+    from pathlib import Path
+    
+    profile = load_profile(profile_name)
+    token = get_profile_token(profile)
+    if not token:
+        render_error("Token not found. Please provide it via TERMBACKUP_TOKEN or re-init.")
+        raise typer.Exit(1)
         
-    render_table("Loaded Plugins", ["Name", "Version", "Status"], rows)
+    with GitHubClient(token) as client:
+        try:
+            with render_progress(f"Downloading snapshot {snapshot_id}...") as prog:
+                tbk_data = client.download_file(profile.repo, f"snapshots/{snapshot_id}.tbk")
+        except Exception as e:
+            render_error(f"Failed to download snapshot: {e}")
+            raise typer.Exit(1)
+            
+    with tempfile.TemporaryDirectory() as td:
+        tbk_path = Path(td) / f"{snapshot_id}.tbk"
+        tbk_path.write_bytes(tbk_data)
+        
+        with render_progress("Computing cryptographic delta...") as prog:
+            delta = diff_snapshot(tbk_path, profile, password, Path(profile.source_dir))
+            
+    render_diff(delta)
+
+
+@app.command(name="delete-snapshot")
+def delete_snapshot_cmd(
+    profile_name: str = typer.Argument(..., help="Profile name"),
+    snapshot_id: str = typer.Argument(..., help="Snapshot ID to delete")
+):
+    """Delete a specific snapshot from the remote vault."""
+    from .config import load_profile, get_profile_token
+    from .github import GitHubClient
+    from .ui import render_status, render_error, render_progress
+    
+    profile = load_profile(profile_name)
+    token = get_profile_token(profile)
+    if not token:
+        render_error("Token not found.")
+        raise typer.Exit(1)
+        
+    with GitHubClient(token) as client:
+        with render_progress(f"Annihilating snapshot {snapshot_id}...") as prog:
+            try:
+                client.delete_file(profile.repo, f"snapshots/{snapshot_id}.tbk", f"Delete snapshot {snapshot_id}")
+            except Exception as e:
+                render_error(f"Deletion failed: {e}")
+                raise typer.Exit(1)
+    render_status("delete", f"Snapshot {snapshot_id} successfully purged from vault.")
 
 if __name__ == "__main__":
     app()

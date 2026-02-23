@@ -7,7 +7,7 @@ A next-generation zero-trust encrypted backup engine forged for terminal suprema
 
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg?style=for-the-badge)](https://github.com/scorpiocodex/Termbackup)
 [![Code Quality](https://img.shields.io/badge/Code_Quality-Pristine-purple.svg?style=for-the-badge)](https://github.com/scorpiocodex/Termbackup)
-[![Version](https://img.shields.io/badge/Version-1.0.0-blue.svg?style=for-the-badge)](https://github.com/scorpiocodex/Termbackup)
+[![Version](https://img.shields.io/badge/Version-2.0.0-blue.svg?style=for-the-badge)](https://github.com/scorpiocodex/Termbackup)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 *Author:* **ScorpioCodeX**  

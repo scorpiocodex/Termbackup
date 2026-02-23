@@ -39,13 +39,21 @@ def get_master_dek(profile: Profile, password: str) -> bytes:
 def create_snapshot(
     profile: Profile, 
     password: str,
-    signing_key_raw: bytes,
     parent_id: Optional[str] = None
 ) -> Tuple[Path, SnapshotMeta]:
     """
     Scan, package, and encrypt a snapshot using the Profile's Master DEK.
     """
     dek = get_master_dek(profile, password)
+    
+    if not profile.signing_private_key_enc:
+        raise SnapshotCreationError("Profile missing signing private key.")
+    
+    try:
+        priv_enc = base64.b64decode(profile.signing_private_key_enc)
+        signing_key_raw = decrypt(priv_enc, dek)
+    except Exception as e:
+        raise SnapshotCreationError(f"Failed to decrypt signing key: {e}")
     
     source_dir = Path(profile.source_dir).resolve()
     if not source_dir.is_dir():

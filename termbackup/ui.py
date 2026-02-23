@@ -4,7 +4,9 @@ Provides cyberpunk aesthetics, neon gradients, unicode fallback.
 """
 import sys
 from contextlib import contextmanager
-from typing import Dict, Generator
+from typing import Optional, List, Dict, Any
+from pathlib import Path
+from typing import Generator
 
 import typer
 from rich.console import Console
@@ -18,6 +20,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 from rich.table import Table
+from rich import box
 from rich.text import Text
 from rich.tree import Tree
 
@@ -69,8 +72,8 @@ ASCII_ICONS: Dict[str, str] = {
 def icon(name: str) -> str:
     return ICONS.get(name, "") if HAS_UNICODE else ASCII_ICONS.get(name, "")
 
-console = Console()
-err_console = Console(stderr=True)
+console = Console(width=120)
+err_console = Console(stderr=True, width=120)
 
 def render_banner() -> None:
     """Render the TermBackup exact ASCII art cyberpunk banner."""
@@ -86,8 +89,8 @@ def render_banner() -> None:
 """
     banner_text = Text(termbackup_ascii, style="bold color(39)")
     
-    # Add matrix/sci-fi glitched trailing text
-    banner_text.append("\n[  NEXUS MATRIX ENGINE v1.0 ⚡ ZERO-TRUST CRYPTO VAULT  ]\n", style="bold cyan")
+    i_delta = icon("delta")
+    banner_text.append(f"\n[  NEXUS MATRIX ENGINE v2.0 {i_delta} ZERO-TRUST CRYPTO VAULT  ]\n", style="bold cyan")
     banner_text.append("STATUS: ONLINE | ENCRYPTION: AES-256-GCM | SIGNATURE: Ed25519", style="dim magenta")
     
     console.print(Panel(
@@ -127,9 +130,8 @@ def render_table(title: str, headers: list[str], rows: list[list[str]]) -> None:
         title=title, 
         border_style="cyan", 
         header_style="bold magenta", 
-        show_lines=True, 
-        expand=True,
-        collapse_padding=True
+        show_lines=True,
+        box=box.ROUNDED if HAS_UNICODE else box.ASCII
     )
     
     if headers:
@@ -143,6 +145,50 @@ def render_table(title: str, headers: list[str], rows: list[list[str]]) -> None:
     console.print(table)
     console.print()
     
+def render_tree_from_paths(root_dir: str, paths: list[str]) -> Tree:
+    """Render a Rich tree layout from a list of paths."""
+    tree = Tree(f"[bold magenta]{root_dir}[/]")
+    
+    for relative_path in paths:
+        parts = Path(relative_path).parts
+        current_node = tree
+        for part in parts:
+            # This is a simplified linear attachment. For a true tree structure,
+            # you'd need to check if a node already exists before adding.
+            # For now, we just add the full path as a leaf.
+            pass # The original snippet had a pass here, implying simple attachment.
+        tree.add(relative_path) # Adding the full relative path as a leaf
+        
+    return tree
+
+def render_diff(delta: Any) -> None:
+    """Render a DeltaResult cleanly to the console."""
+    console.print()
+    if not any([delta.added, delta.modified, delta.deleted]):
+        console.print("[dim italic]No changes detected between snapshot and target directory.[/]")
+        return
+        
+    if delta.added:
+        console.print("[bold green]Added:[/]")
+        for p in delta.added:
+            console.print(f"  [green]+[/] {p}")
+    if delta.modified:
+        console.print("[bold yellow]Modified:[/]")
+        for p in delta.modified:
+            console.print(f"  [yellow]~[/] {p}")
+    if delta.deleted:
+        console.print("[bold red]Deleted:[/]")
+        for p in delta.deleted:
+            console.print(f"  [red]-[/] {p}")
+            
+def render_success_summary(title: str, stats: dict) -> None:
+    """Render a clean summary panel for operations."""
+    table = Table(show_header=False, box=None)
+    table.add_column("Key", style="cyan")
+    table.add_column("Value", style="magenta")
+    i_success = icon("success")
+    console.print(Panel(table, title=f"[bold green]{i_success} {title}[/]", border_style="green", expand=False))
+
 def render_tree(tree: Tree) -> None:
     """Render a Rich tree layout."""
     console.print(Panel(tree, border_style="magenta", title="Tree Preview"))
